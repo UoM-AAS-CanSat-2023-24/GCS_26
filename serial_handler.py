@@ -90,7 +90,7 @@ class SerialWorker(QThread):
                 self._serial = serial.Serial(
                     self.port,
                     self.baud,
-                    timeout=2,
+                    timeout=1.1,  # flight SW sends \r only (no \n); 1.1s lets readline() return cleanly between 1Hz packets
                 )
                 logger.info("Serial port %s opened at %d baud", self.port, self.baud)
                 self.connection_status.emit(True)

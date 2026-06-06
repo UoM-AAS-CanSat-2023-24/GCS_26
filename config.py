@@ -3,10 +3,10 @@ Central configuration for CanSat Ground Station.
 Edit TEAM_ID and PORT before use.
 """
 
-TEAM_ID = 1059
+TEAM_ID = 1079
 BAUD_RATE = 9600
 PORT = "COM3"          # Windows: "COM3" etc.  Linux/Mac: "/dev/ttyUSB0"
-READ_TIMEOUT = 2       # seconds before serial readline times out
+READ_TIMEOUT = 1.1     # seconds - matches flight SW \r-only terminator at 1 Hz
 
 # Rolling graph buffer length (number of packets)
 GRAPH_BUFFER = 300
@@ -24,7 +24,12 @@ TILE_ATTRIBUTION = "Offline Tiles"
 DEFAULT_LAT = 51.18325
 DEFAULT_LON = -1.82139
 
-# Ordered list of fields in the RX packet, exactly matching transmission order
+# Ordered list of fields in the RX packet, exactly matching transmission order.
+#
+# The flight software (telemetry.h) inserts a mandatory blank field between
+# CMD_ECHO and SUBSTATE as required by competition spec §3.1.1.1 #19.
+# This produces the double-comma (,,) visible in the raw packet.
+# CMD_ECHO_BLANK maps to that empty slot so field positions stay aligned.
 FIELDS = [
     "TEAM_ID",
     "MISSION_TIME",
@@ -48,6 +53,7 @@ FIELDS = [
     "GPS_LONGITUDE",
     "GPS_SATS",
     "CMD_ECHO",
+    "CMD_ECHO_BLANK",   # mandatory blank field from competition spec §3.1.1.1 #19
     "SUBSTATE",
     "MAIN_SOC",
     "BUS_POWER",
@@ -63,19 +69,20 @@ FLOAT_FIELDS = {
     "ALTITUDE", "TEMPERATURE", "PRESSURE", "VOLTAGE", "CURRENT",
     "GYRO_R", "GYRO_P", "GYRO_Y", "ACCEL_R", "ACCEL_P", "ACCEL_Y",
     "GPS_ALTITUDE", "GPS_LATITUDE", "GPS_LONGITUDE", "BUS_POWER",
+    "MAIN_SOC",   # flight SW sends this as %.1f float (e.g. "0.0")
 }
 
 # Fields that should be cast to int
 INT_FIELDS = {
-    "TEAM_ID", "PACKET_COUNT", "GPS_SATS", "MAIN_SOC",
+    "TEAM_ID", "PACKET_COUNT", "GPS_SATS",
     "ACTIVE_MECHS", "ACTIVE_CAMERA",
 }
 
-# Sanity range checks: field -> (min, max).  Out-of-range values become None.
+# Sanity range checks: field -> (min, max). Out-of-range values become None.
 RANGE_CHECKS = {
     "ALTITUDE":      (-500,  50000),
     "TEMPERATURE":   (-80,   120),
-    "PRESSURE":      (0,     200000),
+    "PRESSURE":      (0,     200),    # kPa - flight SW sends pressure_kpa (e.g. 101.3)
     "VOLTAGE":       (0,     25),
     "CURRENT":       (-50,   50),
     "GYRO_R":        (-2000, 2000),
