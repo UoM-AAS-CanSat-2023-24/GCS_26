@@ -18,6 +18,7 @@ from PyQt5.QtCore import Qt
 if __name__ == "__main__":
     from dashboard import DashboardGUI
     from serial_handler import SerialWorker
+    from playback_worker import PlaybackWorker
     from simp_sender import SimpSender, load_simp_file
     from logger import DataLogger
     import config
@@ -60,6 +61,26 @@ class StartupDialog(QDialog):
         port_row.addWidget(self.port_combo)
         layout.addLayout(port_row)
 
+        # Playback CSV (optional - leave blank for live serial)
+        pb_row = QHBoxLayout()
+        self.pb_label = QLabel("Playback CSV: (none — use live serial)")
+        pb_row.addWidget(self.pb_label)
+        btn_pb = QPushButton("Browse…")
+        btn_pb.clicked.connect(self._browse_csv)
+        pb_row.addWidget(btn_pb)
+        btn_pb_clear = QPushButton("Clear")
+        btn_pb_clear.clicked.connect(self._clear_csv)
+        pb_row.addWidget(btn_pb_clear)
+        layout.addLayout(pb_row)
+
+        # Speed selector (only relevant for playback)
+        speed_row = QHBoxLayout()
+        speed_row.addWidget(QLabel("Playback speed:"))
+        self.speed_combo = QComboBox()
+        self.speed_combo.addItems(["1×", "2×", "5×", "10×"])
+        speed_row.addWidget(self.speed_combo)
+        layout.addLayout(speed_row)
+
         # SIMP file selection (optional - can also be selected when SIM ACTIVATE is pressed)
         sim_row = QHBoxLayout()
         self.sim_label = QLabel("SIMP File: (none - select later)")
@@ -81,7 +102,22 @@ class StartupDialog(QDialog):
 
     def accept(self):
         self.selected_port = self.port_combo.currentText().strip()
+        self.selected_csv  = getattr(self, "_csv_path", None)
+        speed_map = {"1×": 1.0, "2×": 2.0, "5×": 5.0, "10×": 10.0}
+        self.selected_speed = speed_map.get(self.speed_combo.currentText(), 1.0)
         super().accept()
+
+    def _browse_csv(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Select Telemetry CSV", "logs", "CSV Files (*.csv);;All Files (*)"
+        )
+        if path:
+            self._csv_path = path
+            self.pb_label.setText(f"Playback CSV: {os.path.basename(path)}")
+
+    def _clear_csv(self):
+        self._csv_path = None
+        self.pb_label.setText("Playback CSV: (none — use live serial)")
 
     def _browse_simp(self):
         path, _ = QFileDialog.getOpenFileName(
@@ -118,10 +154,13 @@ class GroundStation:
       - SIM DISABLE stops SimpSender and sends CMD,TEAM_ID,SIM,DISABLE
     """
 
-    def __init__(self, app: QApplication, port: str, simp_file: str | None):
+    def __init__(self, app: QApplication, port: str, simp_file: str | None,
+                 playback_csv: str | None = None, playback_speed: float = 1.0):
         self.app = app
         self.port = port
         self.simp_file = simp_file
+        self.playback_csv   = playback_csv
+        self.playback_speed = playback_speed
 
         self.dashboard     = DashboardGUI()
         self.data_logger   = DataLogger(log_dir="logs")
@@ -155,10 +194,16 @@ class GroundStation:
     # -----------------------------------------------------------------------
 
     def _start_serial(self):
-        self.serial_worker = SerialWorker(port=self.port, baud=config.BAUD_RATE)
+        if self.playback_csv:
+            logger.info("Playback mode: loading %s at %.0fx", self.playback_csv, self.playback_speed)
+            self.serial_worker = PlaybackWorker(
+                csv_path=self.playback_csv, speed=self.playback_speed
+            )
+        else:
+            self.serial_worker = SerialWorker(port=self.port, baud=config.BAUD_RATE)
         self._connect_serial_signals(self.serial_worker)
         self.serial_worker.start()
-        logger.info("SerialWorker started on %s", self.port)
+        logger.info("Worker started (%s)", type(self.serial_worker).__name__)
 
     def _stop_serial(self):
         if self.serial_worker:
@@ -310,8 +355,11 @@ def main():
 
     port      = dialog.selected_port or config.PORT
     simp_file = dialog.selected_simp
+    csv_file  = getattr(dialog, "selected_csv", None)
+    speed     = getattr(dialog, "selected_speed", 1.0)
 
-    station = GroundStation(app, port=port, simp_file=simp_file)
+    station = GroundStation(app, port=port, simp_file=simp_file,
+                            playback_csv=csv_file, playback_speed=speed)
     app.aboutToQuit.connect(station.shutdown)
 
     sys.exit(app.exec_())

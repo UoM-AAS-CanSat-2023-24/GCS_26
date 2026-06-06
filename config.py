@@ -75,7 +75,7 @@ FLOAT_FIELDS = {
 # Fields that should be cast to int
 INT_FIELDS = {
     "TEAM_ID", "PACKET_COUNT", "GPS_SATS",
-    "ACTIVE_MECHS", "ACTIVE_CAMERA",
+    "ACTIVE_MECHS", "ACTIVE_CAMERA", "MATEK",
 }
 
 # Sanity range checks: field -> (min, max). Out-of-range values become None.
