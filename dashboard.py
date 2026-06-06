@@ -573,7 +573,7 @@ class DashboardGUI(QMainWindow):
                 QMessageBox.Yes | QMessageBox.No,
             )
             if reply == QMessageBox.Yes:
-                self.command_send.emit(f"CMD,{config.TEAM_ID},ARM,{state}")
+                self.command_send.emit(f"CMD,{config.TEAM_ID},MEC,ARM,{state}")
             else:
                 btn_arm.setChecked(not checked)   # revert toggle
 
@@ -611,6 +611,18 @@ class DashboardGUI(QMainWindow):
         row_layout = QHBoxLayout()
         row_layout.setSpacing(6)
 
+        # MECH buttons mapped to flight SW named commands (from parse_commands in telemetry.h):
+        #   Button 3 -> MEC,PAYLOAD,ON  (container release at 80% apogee)
+        #   Button 4 -> MEC,PROBE,ON    (egg release at 2m AGL)
+        #   Buttons 1 and 2 have no handler in the flight SW - send anyway for future use
+        # NOTE: ARM is handled by the ARM button above, not MECH buttons.
+        MECH_NAMED_CMDS = {
+            1: "MECH1",    # no FS handler - reserved
+            2: "MECH2",    # no FS handler - reserved
+            3: "PAYLOAD",  # flight SW: payload_release_actuate() (container)
+            4: "PROBE",    # flight SW: egg_release_actuate()     (egg)
+        }
+
         for num in range(1, 5):
             btn = QPushButton(str(num))
             btn.setStyleSheet(MINI_BTN_STYLE)
@@ -618,10 +630,10 @@ class DashboardGUI(QMainWindow):
             btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
 
             def on_mech(checked, n=num):
-                code  = config.MECH_CODES[n]
-                state = "ON" if checked else "OFF"
+                cmd_name = MECH_NAMED_CMDS[n]
+                state    = "ON" if checked else "OFF"
                 self.command_send.emit(
-                    f"CMD,{config.TEAM_ID},MEC,{code},{state}"
+                    f"CMD,{config.TEAM_ID},MEC,{cmd_name},{state}"
                 )
 
             btn.toggled.connect(on_mech)
